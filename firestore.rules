@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users can read any profile (needed to show author names on posts)
+    // but only create/edit their own.
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId ||
+        // Allow admin-only fields (isClassRep, repStatus) to be changed by
+        // the Cloud Function / admin flow. Tighten this to a custom claim
+        // or a hardcoded admin UID list before shipping.
+        request.auth.token.email in ['developersamzy@gmail.com']
+      );
+    }
+
+    // Anyone signed in can read the feed and post updates. Tighten
+    // `create` further (e.g. require sourceType == "community" unless
+    // the user's profile has isClassRep == true) once you wire that check
+    // in server-side rules rather than trusting the client.
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if false; // posts are immutable once created
+    }
+
+    // Verification requests: users create their own, only admins decide.
+    match /repRequests/{requestId} {
+      allow read: if request.auth != null &&
+        request.auth.token.email in ['developersamzy@gmail.com'];
+      allow create: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null &&
+        request.auth.token.email in ['developersamzy@gmail.com'];
+    }
+  }
+}
